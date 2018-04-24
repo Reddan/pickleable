@@ -7,7 +7,6 @@ from subprocess import call
 from pathlib import Path
 from random import random
 from functools import partial
-from checkpointer import get_function_hash
 
 def ensure_list(val):
   if isinstance(val, (tuple, list)):
@@ -26,8 +25,7 @@ def get_tmp_directory():
   return dir_path
 
 class BinaryWrapper:
-  def __init__(self, extension=None):
-    self.extension = extension or ''
+  def __init__(self):
     self.tmp_dir = get_tmp_directory()
 
   def __enter__(self):
@@ -57,11 +55,11 @@ class BinaryUnwrapper:
     self.tmp_dir = get_tmp_directory()
 
   def __enter__(self):
-    tmp_dir = self.tmp_dir
-    for file_name in self.binary_wrapper.byte_map:
-      path = tmp_dir + '/' + file_name
+    byte_map = self.binary_wrapper.byte_map
+    for file_name in byte_map:
+      path = self.tmp_dir + file_name
       with open(path, 'wb') as file:
-        data = copy(self.binary_wrapper.byte_map[file_name]).read()
+        data = copy(byte_map[file_name]).read()
         file.write(data)
     return self.tmp_dir
 
@@ -76,12 +74,12 @@ class TerminalPlot():
 
   def __init__(self, plt):
     with BinaryWrapper() as binary_wrapper:
-      plt.savefig(binary_wrapper.tmp_dir + TerminalPlot.file_name)
+      plt.savefig(binary_wrapper.tmp_dir + self.file_name)
       self.binary_wrapper = binary_wrapper
 
   def show(self):
     with self.binary_wrapper.unwrap() as tmp_dir:
-      call(['imgcat', tmp_dir + TerminalPlot.file_name])
+      call(['imgcat', tmp_dir + self.file_name])
 
   def savefig(self, path):
     with self.binary_wrapper.unwrap() as tmp_dir:
@@ -92,16 +90,18 @@ class PickleableKerasModel():
 
   def __init__(self, model):
     with BinaryWrapper() as binary_wrapper:
-      model.save(binary_wrapper.tmp_dir + PickleableKerasModel.file_name)
+      model.save(binary_wrapper.tmp_dir + self.file_name)
       self.binary_wrapper = binary_wrapper
 
   def unwrap(self):
     from keras.models import load_model
     with self.binary_wrapper.unwrap() as tmp_dir:
-      return load_model(tmp_dir + PickleableKerasModel.file_name)
+      return load_model(tmp_dir + self.file_name)
 
 class PickleableTf:
   def __init__(self, get_model_funcs, *args, **kwargs):
+    from checkpointer import get_function_hash
+
     model_funcs_names = kwargs.get('model_funcs_names', None)
     binary_wrapper = kwargs.get('binary_wrapper', None)
 
