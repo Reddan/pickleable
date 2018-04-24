@@ -25,11 +25,16 @@ def get_tmp_directory():
   os.makedirs(dir_path)
   return dir_path
 
-class DirectoryBytesIO:
-  def __init__(self, cb):
-    tmp_directory = get_tmp_directory()
-    cb(tmp_directory)
-    p = Path(tmp_directory)
+class BinaryWrapper:
+  def __init__(self, extension=None):
+    self.extension = extension or ''
+    self.tmp_dir = get_tmp_directory()
+
+  def __enter__(self):
+    return self
+
+  def __exit__(self, *_):
+    p = Path(self.tmp_dir)
     file_names = [x.name for x in p.iterdir()]
 
     def to_bytes(path):
@@ -37,65 +42,72 @@ class DirectoryBytesIO:
         return BytesIO(file.read())
 
     self.byte_map = {
-      file_name: to_bytes(tmp_directory + '/' + file_name)
+      file_name: to_bytes(self.tmp_dir + '/' + file_name)
       for file_name in file_names
     }
 
-    shutil.rmtree(tmp_directory)
+    shutil.rmtree(self.tmp_dir)
 
-  def unpack(self, cb):
-    tmp_directory = get_tmp_directory()
-    for file_name in self.byte_map:
-      path = tmp_directory + '/' + file_name
+  def unwrap(self):
+    return BinaryUnwrapper(self)
+
+class BinaryUnwrapper:
+  def __init__(self, binary_wrapper):
+    self.binary_wrapper = binary_wrapper
+    self.tmp_dir = get_tmp_directory()
+
+  def __enter__(self):
+    tmp_dir = self.tmp_dir
+    for file_name in self.binary_wrapper.byte_map:
+      path = tmp_dir + '/' + file_name
       with open(path, 'wb') as file:
-        data = copy(self.byte_map[file_name]).read()
+        data = copy(self.binary_wrapper.byte_map[file_name]).read()
         file.write(data)
-    cb(tmp_directory)
-    shutil.rmtree(tmp_directory)
+    return self.tmp_dir
+
+  def __exit__(self, *_):
+    try:
+      shutil.rmtree(self.tmp_dir)
+    except FileNotFoundError:
+      pass
 
 class TerminalPlot():
+  file_name = 'plot.png'
+
   def __init__(self, plt):
-    tmp_path = get_tmp_path() + '.png'
-    plt.savefig(tmp_path)
-    with open(tmp_path, 'rb') as file:
-      self.wrapped_plot = BytesIO(file.read())
-    os.remove(tmp_path)
-    plt.close()
+    with BinaryWrapper() as binary_wrapper:
+      plt.savefig(binary_wrapper.tmp_dir + TerminalPlot.file_name)
+      self.binary_wrapper = binary_wrapper
 
   def show(self):
-    tmp_path = get_tmp_path() + '.png'
-    self.savefig(tmp_path)
-    call(['imgcat', tmp_path])
-    os.remove(tmp_path)
+    with self.binary_wrapper.unwrap() as tmp_dir:
+      call(['imgcat', tmp_dir + TerminalPlot.file_name])
 
   def savefig(self, path):
-    with open(path, 'wb') as file:
-      data = copy(self.wrapped_plot).read()
-      file.write(data)
+    with self.binary_wrapper.unwrap() as tmp_dir:
+      os.rename(tmp_dir + 'plot.png', path)
 
 class PickleableKerasModel():
+  file_name = 'model.h5'
+
   def __init__(self, model):
-    tmp_path = get_tmp_path() + '.h5'
-    model.save(tmp_path)
-    with open(tmp_path, 'rb') as file:
-      self.wrapped_model = BytesIO(file.read())
+    with BinaryWrapper() as binary_wrapper:
+      model.save(binary_wrapper.tmp_dir + PickleableKerasModel.file_name)
+      self.binary_wrapper = binary_wrapper
 
   def unwrap(self):
     from keras.models import load_model
-    tmp_path = get_tmp_path() + '.h5'
-    with open(tmp_path, 'wb') as file:
-      data = copy(self.wrapped_model).read()
-      file.write(data)
-    return load_model(tmp_path)
+    with self.binary_wrapper.unwrap() as tmp_dir:
+      return load_model(tmp_dir + PickleableKerasModel.file_name)
 
 class PickleableTf:
   def __init__(self, get_model_funcs, *args, **kwargs):
     model_funcs_names = kwargs.get('model_funcs_names', None)
-    bytes = kwargs.get('bytes', None)
+    binary_wrapper = kwargs.get('binary_wrapper', None)
 
     if 'model_funcs_names' in kwargs:
       del kwargs['model_funcs_names']
-      del kwargs['bytes']
+      del kwargs['binary_wrapper']
 
     if model_funcs_names == None:
       import tensorflow as tf
@@ -109,7 +121,7 @@ class PickleableTf:
     self.model_funcs_names = model_funcs_names
     self.get_model_funcs = get_model_funcs
     self.get_model_funcs_hash = get_function_hash(get_model_funcs)
-    self.bytes = bytes
+    self.binary_wrapper = binary_wrapper
 
     for func_name in model_funcs_names:
       compute = partial(self._compute, func_name)
@@ -128,18 +140,16 @@ class PickleableTf:
       saver = tf.train.Saver()
 
       with tf.Session() as sess:
-        bytes = self.bytes
+        binary_wrapper = self.binary_wrapper
 
         def save():
-          nonlocal bytes
-          bytes = DirectoryBytesIO(lambda tmp_directory: \
-            saver.save(sess, tmp_directory + ckpt_file_name)
-          )
+          nonlocal binary_wrapper
+          with BinaryWrapper() as binary_wrapper:
+            saver.save(sess, binary_wrapper.tmp_dir + ckpt_file_name)
 
-        if self.bytes:
-          self.bytes.unpack(lambda tmp_directory: \
-            saver.restore(sess, tmp_directory + ckpt_file_name)
-          )
+        if self.binary_wrapper:
+          with self.binary_wrapper.unwrap() as tmp_dir:
+            saver.restore(sess, tmp_dir + ckpt_file_name)
         else:
           init_op = tf.global_variables_initializer()
           sess.run(init_op)
@@ -150,6 +160,6 @@ class PickleableTf:
           *self.args,
           **self.kwargs,
           model_funcs_names=self.model_funcs_names,
-          bytes=bytes
+          binary_wrapper=binary_wrapper
         )
         return model, result
