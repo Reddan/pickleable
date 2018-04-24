@@ -1,2 +1,4 @@
 *.pyc
 pickleable.egg-info/
+/dist
+/build
