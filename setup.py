@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
   name='pickleable',
   packages=['pickleable'],
-  version='0.1.2',
+  version='0.1.3',
   author='Hampus Hallman',
   author_email='me@hampushallman.com',
   url='https://github.com/Reddan/pickleable',

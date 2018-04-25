@@ -45,6 +45,7 @@ class BinaryWrapper:
     }
 
     shutil.rmtree(self.tmp_dir)
+    self.tmp_dir = None
 
   def unwrap(self):
     return BinaryUnwrapper(self)
@@ -75,6 +76,7 @@ class TerminalPlot():
   def __init__(self, plt):
     with BinaryWrapper() as binary_wrapper:
       plt.savefig(binary_wrapper.tmp_dir + self.file_name)
+      plt.close()
       self.binary_wrapper = binary_wrapper
 
   def show(self):
@@ -83,7 +85,7 @@ class TerminalPlot():
 
   def savefig(self, path):
     with self.binary_wrapper.unwrap() as tmp_dir:
-      os.rename(tmp_dir + 'plot.png', path)
+      os.rename(tmp_dir + self.file_name, path)
 
 class PickleableKerasModel():
   file_name = 'model.h5'
