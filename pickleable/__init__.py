@@ -24,6 +24,14 @@ def get_tmp_directory():
   os.makedirs(dir_path)
   return dir_path
 
+def read_bytes(path):
+  with open(path, 'rb') as file:
+    return BytesIO(file.read())
+
+def write_bytes(path, data):
+  with open(path, 'wb') as file:
+    file.write(data)
+
 class BinaryWrapper:
   def __init__(self):
     self.tmp_dir = get_tmp_directory()
@@ -34,16 +42,10 @@ class BinaryWrapper:
   def __exit__(self, *_):
     p = Path(self.tmp_dir)
     file_names = [x.name for x in p.iterdir()]
-
-    def to_bytes(path):
-      with open(path, 'rb') as file:
-        return BytesIO(file.read())
-
     self.byte_map = {
-      file_name: to_bytes(self.tmp_dir + '/' + file_name)
+      file_name: read_bytes(self.tmp_dir + file_name)
       for file_name in file_names
     }
-
     shutil.rmtree(self.tmp_dir)
     self.tmp_dir = None
 
@@ -59,9 +61,8 @@ class BinaryUnwrapper:
     byte_map = self.binary_wrapper.byte_map
     for file_name in byte_map:
       path = self.tmp_dir + file_name
-      with open(path, 'wb') as file:
-        data = copy(byte_map[file_name]).read()
-        file.write(data)
+      data = copy(byte_map[file_name]).read()
+      write_bytes(path, data)
     return self.tmp_dir
 
   def __exit__(self, *_):
