@@ -1,75 +1,13 @@
-import tempfile
 import os
-import shutil
-from io import BytesIO
-from copy import copy
 from subprocess import call
-from pathlib import Path
-from random import random
 from functools import partial
+from .binary_wrapper import BinaryWrapper
 
 def ensure_list(val):
   if isinstance(val, (tuple, list)):
     return list(val)
   else:
     return [val]
-
-def get_tmp_path():
-  tmp_dir = tempfile.gettempdir()
-  destination = 'tmp' + str(random())[2:]
-  return tmp_dir + '/' + destination
-
-def get_tmp_directory():
-  dir_path = get_tmp_path() + '/'
-  os.makedirs(dir_path)
-  return dir_path
-
-def read_bytes(path):
-  with open(path, 'rb') as file:
-    return BytesIO(file.read())
-
-def write_bytes(path, data):
-  with open(path, 'wb') as file:
-    file.write(data)
-
-class BinaryWrapper:
-  def __init__(self):
-    self.tmp_dir = get_tmp_directory()
-
-  def __enter__(self):
-    return self
-
-  def __exit__(self, *_):
-    p = Path(self.tmp_dir)
-    file_names = [x.name for x in p.iterdir()]
-    self.byte_map = {
-      file_name: read_bytes(self.tmp_dir + file_name)
-      for file_name in file_names
-    }
-    shutil.rmtree(self.tmp_dir)
-    self.tmp_dir = None
-
-  def unwrap(self):
-    return BinaryUnwrapper(self)
-
-class BinaryUnwrapper:
-  def __init__(self, binary_wrapper):
-    self.binary_wrapper = binary_wrapper
-    self.tmp_dir = get_tmp_directory()
-
-  def __enter__(self):
-    byte_map = self.binary_wrapper.byte_map
-    for file_name in byte_map:
-      path = self.tmp_dir + file_name
-      data = copy(byte_map[file_name]).read()
-      write_bytes(path, data)
-    return self.tmp_dir
-
-  def __exit__(self, *_):
-    try:
-      shutil.rmtree(self.tmp_dir)
-    except FileNotFoundError:
-      pass
 
 class TerminalPlot():
   file_name = 'plot.png'
