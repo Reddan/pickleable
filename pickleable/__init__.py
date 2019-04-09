@@ -14,30 +14,30 @@ class TerminalPlot():
 
   def __init__(self, plt):
     with BinaryWrapper() as binary_wrapper:
-      plt.savefig(binary_wrapper.tmp_dir + self.file_name)
+      plt.savefig(binary_wrapper.path / self.file_name)
       plt.close()
       self.binary_wrapper = binary_wrapper
 
   def show(self):
-    with self.binary_wrapper.unwrap() as tmp_dir:
-      call(['imgcat', tmp_dir + self.file_name])
+    with self.binary_wrapper.unwrap() as path:
+      call(['imgcat', path / self.file_name])
 
-  def savefig(self, path):
-    with self.binary_wrapper.unwrap() as tmp_dir:
-      os.rename(tmp_dir + self.file_name, path)
+  def savefig(self, target_path):
+    with self.binary_wrapper.unwrap() as path:
+      os.rename(path / self.file_name, target_path)
 
 class PickleableKerasModel():
   file_name = 'model.h5'
 
   def __init__(self, model):
     with BinaryWrapper() as binary_wrapper:
-      model.save(binary_wrapper.tmp_dir + self.file_name)
+      model.save(binary_wrapper.path / self.file_name)
       self.binary_wrapper = binary_wrapper
 
   def unwrap(self):
     from keras.models import load_model
-    with self.binary_wrapper.unwrap() as tmp_dir:
-      return load_model(tmp_dir + self.file_name)
+    with self.binary_wrapper.unwrap() as path:
+      return load_model(path / self.file_name)
 
 class PickleableTf:
   def __init__(self, get_model_funcs, *args, **kwargs):
@@ -86,11 +86,11 @@ class PickleableTf:
         def save():
           nonlocal binary_wrapper
           with BinaryWrapper() as binary_wrapper:
-            saver.save(sess, binary_wrapper.tmp_dir + ckpt_file_name)
+            saver.save(sess, binary_wrapper.path / ckpt_file_name)
 
         if self.binary_wrapper:
-          with self.binary_wrapper.unwrap() as tmp_dir:
-            saver.restore(sess, tmp_dir + ckpt_file_name)
+          with self.binary_wrapper.unwrap() as path:
+            saver.restore(sess, path / ckpt_file_name)
         else:
           init_op = tf.global_variables_initializer()
           sess.run(init_op)
