@@ -31,7 +31,7 @@ def write_bytes(path, data):
   with open(path, 'wb') as file:
     file.write(data)
 
-def path_to_byte_map(root, path, binary_by_path={}):
+def path_to_byte_map(root, path, binary_by_path):
   if path.is_file():
     binary_by_path[path.relative_to(root)] = read_bytes(path)
   else:
@@ -57,7 +57,7 @@ class BinaryWrapper:
     return self
 
   def __exit__(self, *_):
-    self.byte_map = path_to_byte_map(self.path, self.path)
+    self.byte_map = path_to_byte_map(self.path, self.path, {})
     shutil.rmtree(self.path)
     self.path = None
 
